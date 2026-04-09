@@ -194,7 +194,7 @@ def evaluar_señales(df: pd.DataFrame) -> dict | None:
     logger.info("[%s] 🎯 SEÑAL: %s score=%d fuentes=%s ATR=%.2f",
                 SYMBOL, direction, score, signal['sources'], signal['atr'])
 
-    return signal
+    return signal, df
 
 
 def calcular_tp(entry_price: float, sl_price: float, direction: str, rr: float = None) -> float:
