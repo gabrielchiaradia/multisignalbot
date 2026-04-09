@@ -131,6 +131,7 @@ def ciclo(client):
         # ── Posición abierta: timeout + resguardo ───────────
         pos = get_open_position(client, SYMBOL)
         if pos:
+            logger.info("[%s] Posición abierta detectada: %s %.4f @ %.2f", SYMBOL, pos['side'], pos['size'], pos['entry'])
             cerro = _gestionar_timeout(client)
             if cerro:
                 sincronizar_realidad_vs_journal(client, SYMBOL)
