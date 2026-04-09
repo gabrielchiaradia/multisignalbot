@@ -18,7 +18,7 @@ def generar_reporte_no_signal(df, symbol):
     
     # Formateo del reporte solicitado
     logger.info("-" * 55)
-    logger.info(f"🔍 DIAGNÓSTICO {symbol} | {df.index[-1]}")
+    logger.info(f"🔍 DIAGNÓSTICO {symbol} | Vela {df.index[-1]} → {df.index[-1] + pd.Timedelta(hours=4)}")
     logger.info(f"Precio: {last['close']:.2f}") # El precio siempre adelante
     logger.info(f"RSI: {last['rsi']:.1f} (prev: {prev['rsi']:.1f})")
     logger.info(f"ATR: {last['atr']:.2f}")
