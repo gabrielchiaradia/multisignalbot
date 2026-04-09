@@ -142,7 +142,10 @@ def ciclo(client):
         if not pos:
             df_4h = obtener_velas_4h(client)
             nueva_vela = _hay_nueva_vela_4h(df_4h)
-
+            
+            # Elimino la ultima vela para que no use la actual como vela anterior
+            df_4h = df_4h.iloc[:-1]
+            
             if nueva_vela and df_4h is not None and not df_4h.empty:
                 logger.info("[%s] Nueva vela 4h cerrada. Evaluando señales...", SYMBOL)
 
@@ -156,8 +159,6 @@ def ciclo(client):
                     logger.info("[%s] Cortacircuitos diario activo.", SYMBOL)
                 else:
                     # Evaluar señales
-                    # Elimino la ultima vela para que no use la actual como vela anterior
-                    df_4h = df_4h.iloc[:-1]
                     signal, df_4h= evaluar_señales(df_4h)
 
                     if signal:
@@ -254,10 +255,16 @@ def main():
     while True:
         try:
             ciclo(client)
+            logger.debug("Ciclo completado. Esperando 60s...")
+
         except Exception as e:
             logger.error(f"Error en loop principal: {e}", exc_info=True)
 
-        time.sleep(60)
+        try:
+            time.sleep(60)
+        except Exception as e:
+            logger.error(f"Error en sleep: {e}")
+            break
 
 
 if __name__ == "__main__":
