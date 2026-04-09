@@ -75,7 +75,7 @@ def evaluar_señales(df: pd.DataFrame) -> tuple:
         }
     """
     if len(df) < 25:  # mínimo para indicadores
-        return None
+        return None, df
 
     df = add_indicators(df)
 
@@ -84,7 +84,7 @@ def evaluar_señales(df: pd.DataFrame) -> tuple:
     prev2 = df.iloc[-3]
 
     if pd.isna(row['rsi']) or pd.isna(row['atr']) or row['atr'] <= 0:
-        return None
+        return None, df 
 
     score = 0
     sources = []
@@ -173,14 +173,14 @@ def evaluar_señales(df: pd.DataFrame) -> tuple:
         if score > 0:
             logger.debug("[%s] Señal descartada: %s score=%d (min=%d)",
                         SYMBOL, '+'.join(sources), score, MIN_SCORE)
-        return None
+        return None, df 
 
     # Validar distancia al SL mínima (0.1% para cubrir fees)
     entry_ref = row['close']
     dist = abs(entry_ref - sl)
     if dist / entry_ref < 0.001:
         logger.debug("[%s] Señal descartada: SL muy cerca (%.4f%%)", SYMBOL, dist/entry_ref*100)
-        return None
+        return None,df 
 
     signal = {
         'signal': direction,
