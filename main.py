@@ -156,7 +156,7 @@ def ciclo(client):
                     logger.info("[%s] Cortacircuitos diario activo.", SYMBOL)
                 else:
                     # Evaluar señales
-                    signal = evaluar_señales(df_4h)
+                    signal, df_4h= evaluar_señales(df_4h)
 
                     if signal:
                         _ejecutar_señal(client, signal, account)
