@@ -1,5 +1,7 @@
 # src/diagnostics.py
+import pandas as pd
 from src.logger import logger
+
 
 def generar_reporte_no_signal(df, symbol):
     """
