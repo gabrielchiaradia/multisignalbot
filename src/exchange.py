@@ -62,11 +62,9 @@ def place_limit_order(client, symbol, side, price, quantity):
         step     = get_step_size(client, symbol)
         quantity = _round_tick(float(quantity), step)
 
-        position_side = "LONG" if side == SIDE_BUY else "SHORT"
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
-            positionSide=position_side,
             type=FUTURE_ORDER_TYPE_LIMIT,
             timeInForce=TIME_IN_FORCE_GTX,
             quantity=quantity,
@@ -96,17 +94,12 @@ def place_market_order(client, symbol, side, quantity):
         step     = get_step_size(client, symbol)
         quantity = _round_tick(float(quantity), step)
 
-        # En Hedge Mode, el positionSide es el lado de la posición que queremos cerrar
-        # Si cerramos con SELL → estamos cerrando un LONG
-        # Si cerramos con BUY  → estamos cerrando un SHORT
-        position_side = "LONG" if side == SIDE_SELL else "SHORT"
-
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
-            positionSide=position_side,
             type=FUTURE_ORDER_TYPE_MARKET,
             quantity=quantity,
+            reduceOnly=True,
         )
 
         logger.info(f"[{BOT_ID}] ✅ Orden MARKET {side} colocada (timeout) qty={quantity}")
@@ -191,11 +184,9 @@ def place_sl_tp(client, symbol, side, qty, sl_price, tp_price):
                 except Exception:
                     pass
 
-        position_side = "LONG" if side == SIDE_BUY else "SHORT"
         client.futures_create_order(
             symbol=symbol,
             side=close_side,
-            positionSide=position_side,
             type=FUTURE_ORDER_TYPE_STOP_MARKET,
             stopPrice=sl_price,
             closePosition=True
@@ -203,7 +194,6 @@ def place_sl_tp(client, symbol, side, qty, sl_price, tp_price):
         client.futures_create_order(
             symbol=symbol,
             side=close_side,
-            positionSide=position_side,
             type=FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET,
             stopPrice=tp_price,
             closePosition=True
@@ -265,16 +255,16 @@ def close_market_position(client, symbol):
 
         # 3. Cerrar a mercado
         close_side    = SIDE_SELL if side == "LONG" else SIDE_BUY
-        position_side = side  # "LONG" o "SHORT"
+        
         qty  = abs(amt)
         step = get_step_size(client, symbol)
         qty  = _round_tick(qty, step)
         client.futures_create_order(
             symbol=symbol,
             side=close_side,
-            positionSide=position_side,
             type=FUTURE_ORDER_TYPE_MARKET,
             quantity=qty,
+            reduceOnly=True,
         )
         logger.info(
             f"[{BOT_ID}] ✅ Posición {side} cerrada a mercado por filtro de noticias "
