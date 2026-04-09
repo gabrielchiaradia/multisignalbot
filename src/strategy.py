@@ -221,7 +221,7 @@ def cooldown_activo(cooldown_hours: int = 2) -> bool:
                 last_time = datetime.fromisoformat(ultimo['close_time'])
                 horas = (datetime.now(timezone.utc) - last_time).total_seconds() / 3600.0
                 if horas < cooldown_hours:
-                    logger.debug("Cooldown activo. Faltan %.1f horas.", cooldown_hours - horas)
+                    logger.info("Cooldown activo. Faltan %.1f horas.", cooldown_hours - horas)
                     return True
     except Exception:
         pass
