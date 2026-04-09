@@ -255,7 +255,7 @@ def main():
     while True:
         try:
             ciclo(client)
-            logger.debug("Ciclo completado. Esperando 60s...")
+            logger.info("Ciclo completado. Esperando 60s...")
 
         except Exception as e:
             logger.error(f"Error en loop principal: {e}", exc_info=True)
