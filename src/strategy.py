@@ -59,7 +59,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def evaluar_señales(df: pd.DataFrame) -> dict | None:
+def evaluar_señales(df: pd.DataFrame) -> tuple:
     """
     Evalúa las últimas 3 velas del DataFrame de 4h.
     Retorna dict con señal si hay confluencia suficiente, o None.

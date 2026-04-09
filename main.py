@@ -161,9 +161,7 @@ def ciclo(client):
                     if signal:
                         _ejecutar_señal(client, signal, account)
                     else:
-                        from src.strategy import add_indicators
                         logger.info("[%s] Sin señal en esta vela 4h.", SYMBOL)
-                        df_4h = add_indicators(client)
                         generar_reporte_no_signal(df_4h, SYMBOL)
 
         # ── Dashboard ───────────────────────────────────────
