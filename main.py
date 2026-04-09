@@ -156,6 +156,8 @@ def ciclo(client):
                     logger.info("[%s] Cortacircuitos diario activo.", SYMBOL)
                 else:
                     # Evaluar señales
+                    # Elimino la ultima vela para que no use la actual como vela anterior
+                    df_4h = df_4h.iloc[:-1]
                     signal, df_4h= evaluar_señales(df_4h)
 
                     if signal:
