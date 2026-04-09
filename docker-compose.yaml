@@ -1,0 +1,74 @@
+# docker-compose.yml — Multi-Signal Trading Bot
+#
+# Uso:
+#   docker compose up -d --build
+#   docker compose logs -f ms-eth
+#   docker compose down
+
+services:
+  # ── ETH (el champion) ──────────────────────────────────
+  ms-eth:
+    build: .
+    container_name: ms-eth
+    restart: unless-stopped
+    env_file: .env.eth
+    user: "1000:1000"
+    environment:
+      - TZ=UTC
+      - BOT_ID=ETH
+      - PYTHONPATH=/app
+    volumes:
+      - ./dashboard/data:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── BTC ─────────────────────────────────────────────────
+  ms-btc:
+    build: .
+    container_name: ms-btc
+    restart: unless-stopped
+    env_file: .env.btc
+    user: "1000:1000"
+    environment:
+      - TZ=UTC
+      - BOT_ID=BTC
+      - PYTHONPATH=/app
+    volumes:
+      - ./dashboard/data:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── SOL ─────────────────────────────────────────────────
+  ms-sol:
+    build: .
+    container_name: ms-sol
+    restart: unless-stopped
+    env_file: .env.sol
+    user: "1000:1000"
+    environment:
+      - TZ=UTC
+      - BOT_ID=SOL
+      - PYTHONPATH=/app
+    volumes:
+      - ./dashboard/data:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Dashboard ──────────────────────────────────────────
+  #ms-dashboard:
+  #  image: nginx:latest
+  #  container_name: ms-dashboard
+  #  restart: unless-stopped
+  #  ports:
+  #    - "8082:80"
+  #  volumes:
+  #    - ./dashboard/data:/usr/share/nginx/html/data:ro
