@@ -7,6 +7,7 @@ Señales: RSI Extreme, Inside Bar, Volume Breakout, Donchian 20.
 """
 import time
 import threading
+import pandas as pd
 from datetime import datetime, timezone
 from src.config import (
     SYMBOL, BOT_ID, BOT_NAME, RR_RATIO, RISK_BASE, RISK_CONFLUENCIA,
@@ -25,6 +26,7 @@ from src.live_writer import exportar_dashboard, exportar_status
 from src.notifier import crear_notifier
 from src.journal import _load
 from src.news_filter import is_news_blocked
+from src.diagnostics import generar_reporte_no_signal
 
 client = None
 cycle_count = 0
@@ -160,6 +162,7 @@ def ciclo(client):
                         _ejecutar_señal(client, signal, account)
                     else:
                         logger.info("[%s] Sin señal en esta vela 4h.", SYMBOL)
+                        generar_reporte_no_signal(df_4h, SYMBOL)
 
         # ── Dashboard ───────────────────────────────────────
         exportar_status(
