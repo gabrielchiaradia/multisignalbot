@@ -45,6 +45,9 @@ class TelegramNotifier:
     def alert_trade_open(self, symbol, direction, entry, sl, tp, qty, risk_pct, strategy: str = ""):
         emoji = "🚀" if direction == "LONG" else "📉"
         dist_tp = abs((tp - entry) / entry) * 100
+	dist_sl = abs((sl - entry) / entry) * 100
+	rr_real = dist_tp / dist_sl if dist_sl > 0 else 0
+
         strategy_label = f"\n📊 <b>Estrategia:</b> <code>{strategy}</code>" if strategy else ""
 
         msg = self._tag(
@@ -55,7 +58,7 @@ class TelegramNotifier:
             f"💰 <b>Cantidad:</b> <code>{qty}</code>\n"
             f"───────────────────\n"
             f"📥 <b>Entrada:</b> <code>{entry:.2f}</code>\n"
-            f"🎯 <b>Take Profit:</b> <code>{tp:.2f}</code> (<i>+{dist_tp:.1f}%</i>)\n"
+            f"🎯 <b>Take Profit:</b> <code>{tp:.2f}</code> (<i>{dist_tp:.1f}% | RR {rr_real:.1f}</i>)\n"
             f"🛑 <b>Stop Loss:</b> <code>{sl:.2f}</code>\n"
             f"🛡️ <b>Riesgo:</b> <code>{risk_pct}%</code> del Capital"
             f"{strategy_label}\n"
