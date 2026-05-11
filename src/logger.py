@@ -1,6 +1,16 @@
 import logging
 import os
+import sys
 from datetime import datetime
+
+# Forzar UTF-8 en stdout/stderr — necesario en Windows cuando el output se
+# redirige a archivo (Task Scheduler, .bat con >> log) o el terminal no
+# es UTF-8 por default. Sin esto, los emojis se escapan a ✅ etc.
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass  # python <3.7 o stream no reconfigurable; sigue mejor que antes
 
 # Crear carpeta de logs si no existe
 if not os.path.exists('logs'):
@@ -24,7 +34,8 @@ file_handler = logging.FileHandler(log_filename, encoding='utf-8')
 file_handler.setFormatter(log_format)
 file_handler.setLevel(logging.INFO)
 
-# 3. Handler para Consola (Stream) con colores simples para legibilidad
+# 3. Handler para Consola — solo aplica colores si stdout es TTY.
+#    Si está redirigido a archivo, usa el formato plano (sin ANSI escapes).
 class ColorFormatter(logging.Formatter):
     """Añade colores a los niveles de log en la consola"""
     grey = "\x1b[38;20m"
@@ -48,8 +59,15 @@ class ColorFormatter(logging.Formatter):
         formatter = logging.Formatter(log_fmt, datefmt='%H:%M:%S')
         return formatter.format(record)
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(ColorFormatter())
+console_handler = logging.StreamHandler(sys.stdout)
+if sys.stdout.isatty():
+    console_handler.setFormatter(ColorFormatter())
+else:
+    plain_format = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    console_handler.setFormatter(plain_format)
 console_handler.setLevel(logging.INFO)
 
 # Agregar handlers al logger
