@@ -9,8 +9,7 @@ from src.journal import record_open, _load, _save
 from src.notifier import crear_notifier
 from src.exchange import (
     cancel_all_open_orders,
-    place_limit_order,
-    place_market_order,
+    place_market_entry_order,
     place_sl_tp,
     verificar_y_rescatar_sl_tp,
     get_open_position
@@ -56,39 +55,42 @@ def ejecutar_apertura_completa(client, symbol, signal, entry_price, sl_price, tp
         # 1. Limpieza previa
         cancel_all_open_orders(client, symbol)
 
-        # 2. Enviar orden principal
+        # 2. Enviar orden MARKET (entrada inmediata)
         side = "BUY" if signal == "LONG" else "SELL"
-        order = place_limit_order(client, symbol, side, entry_price, qty)
+        order = place_market_entry_order(client, symbol, side, qty)
 
-        if not order or order.get('status') not in ['NEW', 'FILLED']:
-            logger.warning(f"[{symbol}] Orden LIMIT rechazada o fallida.")
+        if not order or order.get('status') not in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
+            logger.warning(f"[{symbol}] Orden MARKET rechazada o fallida.")
             return False
 
         # ID único para el journal
         trade_id = str(uuid.uuid4())[:8]
-        logger.info(f"[{symbol}] Orden LIMIT enviada (ID: {trade_id}). Esperando ejecución...")
 
-        # 3. Bucle de espera (Wait for Fill)
+        # 3. Confirmar posición (MARKET ya debería estar lleno, doble check rápido)
         filled = False
-        for _ in range(10):
+        for _ in range(5):
             pos_info = client.futures_position_information(symbol=symbol)
             if any(float(p['positionAmt']) != 0 for p in pos_info if p['symbol'] == symbol):
                 filled = True
                 break
-            time.sleep(1)
+            time.sleep(0.5)
 
-        # 4. Acciones post-fill
-        if filled:
-            try:
-                place_sl_tp(client, symbol, side, qty, sl_price, tp_price)
-                logger.info(f"[{symbol}] ✅ Posición detectada. SL/TP colocados.")
-            except Exception as e:
-                logger.error(f"Error colocando SL/TP post-fill: {e}")
-            record_open(trade_id, symbol, signal, entry_price, sl_price, tp_price, qty, risk_pct, balance_at_open, bias=bias)
-            crear_notifier().alert_trade_open(symbol, signal, entry_price, sl_price, tp_price, qty, risk_pct, strategy=bias)
-        else:
-            logger.warning(f"[{symbol}] ⚠️ LIMIT no se llenó en 10s. Orden activa en Binance, monitoreando...")
-            record_open(trade_id, symbol, signal, entry_price, sl_price, tp_price, qty, risk_pct, balance_at_open, status="PENDING_FILL", bias=bias)
+        if not filled:
+            logger.error(f"[{symbol}] ⚠️ Orden MARKET enviada pero posición no detectada tras 2.5s.")
+            return False
+
+        # 4. Recuperar precio real de fill si está disponible
+        actual_entry = float(order.get('avgPrice') or 0) or entry_price
+
+        # 5. Colocar SL/TP
+        try:
+            place_sl_tp(client, symbol, side, qty, sl_price, tp_price)
+            logger.info(f"[{symbol}] ✅ Posición abierta @ {actual_entry}. SL/TP colocados.")
+        except Exception as e:
+            logger.error(f"Error colocando SL/TP post-fill: {e}")
+
+        record_open(trade_id, symbol, signal, actual_entry, sl_price, tp_price, qty, risk_pct, balance_at_open, bias=bias)
+        crear_notifier().alert_trade_open(symbol, signal, actual_entry, sl_price, tp_price, qty, risk_pct, strategy=bias)
 
         return True
 

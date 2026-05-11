@@ -109,6 +109,35 @@ def place_market_order(client, symbol, side, quantity):
         logger.error(f"[{BOT_ID}] ❌ Error colocando MARKET order: {e}")
         return None
 
+def place_market_entry_order(client, symbol, side, quantity):
+    """
+    Coloca una orden MARKET de APERTURA (sin reduceOnly).
+    Garantiza el fill inmediato — el bot entra al precio actual aunque
+    pague taker fee. Reemplaza la lógica antigua de LIMIT GTX que era
+    rechazada cuando el precio cruzaba el spread (caso típico en breakouts).
+    """
+    try:
+        step     = get_step_size(client, symbol)
+        quantity = _round_tick(float(quantity), step)
+
+        order = client.futures_create_order(
+            symbol=symbol,
+            side=side,
+            type=FUTURE_ORDER_TYPE_MARKET,
+            quantity=quantity,
+        )
+
+        avg_px = float(order.get('avgPrice') or 0)
+        if avg_px > 0:
+            logger.info(f"[{BOT_ID}] ✅ Orden MARKET {side} (entrada) llenada @ {avg_px} qty={quantity}")
+        else:
+            logger.info(f"[{BOT_ID}] ✅ Orden MARKET {side} (entrada) enviada qty={quantity}")
+        return order
+
+    except Exception as e:
+        logger.error(f"[{BOT_ID}] ❌ Error colocando MARKET entry: {e}")
+        return None
+
 def verificar_y_rescatar_sl_tp(client, symbol, current_trade):
     """
     Verifica si una posición abierta tiene sus órdenes de protección (SL/TP).
