@@ -1,8 +1,11 @@
 __pycache__/
 *.pyc
+.env
 .env.*
 !.env.example
 logs/
 dashboard/data/
 *.tmp
 venv/
+.claude/
+run_bot.bat

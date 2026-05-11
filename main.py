@@ -236,12 +236,14 @@ def _ejecutar_señal(client, signal, account):
 
     # Bias = las fuentes de señal
     bias = sources
+    ema50_val = signal.get('ema50')
+    trend_bias_val = signal.get('trend_bias')
 
     try:
         ejecutar_apertura_completa(
             client, SYMBOL, direction, entry_price, sl, tp,
             qty, risk_pct, balance_at_open=account['wallet_balance'],
-            bias=bias
+            bias=bias, ema50=ema50_val, trend_bias=trend_bias_val
         )
     except Exception as e:
         logger.error("[%s] Error ejecutando apertura: %s", SYMBOL, e, exc_info=True)

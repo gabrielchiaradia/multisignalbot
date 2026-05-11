@@ -18,11 +18,15 @@ def generar_reporte_no_signal(df, symbol):
     dc_up = last['close'] > prev['dc_high_20'] and prev['close'] <= prev['dc_high_20']
     dc_dn = last['close'] < prev['dc_low_20'] and prev['close'] >= prev['dc_low_20']
     
+    # Bias EMA50: ¿qué dirección estaría permitida?
+    bias_ok = "LONG-only" if last['close'] > last['ema50'] else "SHORT-only"
+
     # Formateo del reporte solicitado
     logger.info("-" * 55)
     logger.info(f"🔍 DIAGNÓSTICO {symbol}")
     logger.info(f"Vela {df.index[-1]} → {df.index[-1] + pd.Timedelta(hours=4)}")
     logger.info(f"Precio: {last['close']:.2f}") # El precio siempre adelante
+    logger.info(f"EMA50: {last['ema50']:.2f} → Bias: {bias_ok}")
     logger.info(f"RSI: {last['rsi']:.1f} (prev: {prev['rsi']:.1f})")
     logger.info(f"ATR: {last['atr']:.2f}")
     logger.info(f"Vol ratio: {last['vol_ratio']:.2f}")

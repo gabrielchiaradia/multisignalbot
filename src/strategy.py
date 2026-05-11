@@ -11,11 +11,23 @@ Retorna señales con score de confluencia.
 Score >= MIN_SCORE para operar.
 """
 
+import json
+import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
-from src.config import SYMBOL, RR_RATIO, MIN_SCORE
+from src.config import SYMBOL, RR_RATIO, MIN_SCORE, EMA_FILTER_ENABLED, SIGNAL_LOG_FILE
 from src.logger import logger
+
+
+def _log_signal_evaluation(record: dict):
+    """Append a signal evaluation (taken or rejected) to the signals log file."""
+    try:
+        os.makedirs(os.path.dirname(SIGNAL_LOG_FILE) or "logs", exist_ok=True)
+        with open(SIGNAL_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.error(f"Error escribiendo signal log: {e}")
 
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -169,18 +181,63 @@ def evaluar_señales(df: pd.DataFrame) -> tuple:
     # ══════════════════════════════════════════════════════
     # EVALUACIÓN FINAL
     # ══════════════════════════════════════════════════════
+    entry_ref = row['close']
+    ema50_val = float(row['ema50']) if not pd.isna(row['ema50']) else None
+    trend_bias = None
+    if ema50_val is not None:
+        trend_bias = 'LONG' if entry_ref > ema50_val else 'SHORT'
+
+    # Helper para registrar toda decisión (taken o rejected) en el signal log.
+    def _record(decision: str):
+        _log_signal_evaluation({
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'candle_time': str(df.index[-1]),
+            'symbol': SYMBOL,
+            'decision': decision,            # TAKEN | REJECTED_SCORE | REJECTED_EMA50 | REJECTED_SL | NO_DIRECTION
+            'direction': direction,
+            'score': score,
+            'sources': '+'.join(sources) if sources else '',
+            'close': float(entry_ref),
+            'ema50': ema50_val,
+            'trend_bias': trend_bias,
+            'rsi': float(row['rsi']) if not pd.isna(row['rsi']) else None,
+            'atr': float(row['atr']) if not pd.isna(row['atr']) else None,
+            'vol_ratio': float(row['vol_ratio']) if not pd.isna(row['vol_ratio']) else None,
+            'sl_proposed': float(sl) if sl is not None else None,
+        })
+
     if direction is None or score < MIN_SCORE or sl is None:
-        if score > 0:
-            logger.debug("[%s] Señal descartada: %s score=%d (min=%d)",
-                        SYMBOL, '+'.join(sources), score, MIN_SCORE)
-        return None, df 
+        if direction is None and score == 0:
+            _record('NO_DIRECTION')
+        else:
+            _record('REJECTED_SCORE')
+            if score > 0:
+                logger.debug("[%s] Señal descartada: %s score=%d (min=%d)",
+                            SYMBOL, '+'.join(sources), score, MIN_SCORE)
+        return None, df
+
+    # Filtro de tendencia EMA50 (toggleable via EMA_FILTER_ENABLED).
+    if EMA_FILTER_ENABLED:
+        if ema50_val is None:
+            _record('REJECTED_EMA50_NAN')
+            return None, df
+        if direction == 'LONG' and entry_ref <= ema50_val:
+            logger.info("[%s] LONG descartado por filtro EMA50 (close=%.2f <= ema50=%.2f) | señales=%s",
+                        SYMBOL, entry_ref, ema50_val, '+'.join(sources))
+            _record('REJECTED_EMA50')
+            return None, df
+        if direction == 'SHORT' and entry_ref >= ema50_val:
+            logger.info("[%s] SHORT descartado por filtro EMA50 (close=%.2f >= ema50=%.2f) | señales=%s",
+                        SYMBOL, entry_ref, ema50_val, '+'.join(sources))
+            _record('REJECTED_EMA50')
+            return None, df
 
     # Validar distancia al SL mínima (0.1% para cubrir fees)
-    entry_ref = row['close']
     dist = abs(entry_ref - sl)
     if dist / entry_ref < 0.001:
         logger.debug("[%s] Señal descartada: SL muy cerca (%.4f%%)", SYMBOL, dist/entry_ref*100)
-        return None,df 
+        _record('REJECTED_SL')
+        return None, df
 
     signal = {
         'signal': direction,
@@ -189,10 +246,13 @@ def evaluar_señales(df: pd.DataFrame) -> tuple:
         'sources': '+'.join(sources),
         'atr': float(row['atr']),
         'entry_ref': float(entry_ref),
+        'ema50': ema50_val,
+        'trend_bias': trend_bias,
     }
 
-    logger.info("[%s] 🎯 SEÑAL: %s score=%d fuentes=%s ATR=%.2f",
-                SYMBOL, direction, score, signal['sources'], signal['atr'])
+    logger.info("[%s] 🎯 SEÑAL: %s score=%d fuentes=%s ATR=%.2f EMA50=%.2f",
+                SYMBOL, direction, score, signal['sources'], signal['atr'], ema50_val or 0.0)
+    _record('TAKEN')
 
     return signal, df
 

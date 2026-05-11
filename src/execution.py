@@ -46,10 +46,11 @@ def gestionar_resguardo_posicion(client, symbol):
         logger.error(f"Error en gestionar_resguardo_posicion para {symbol}: {e}")
 
 
-def ejecutar_apertura_completa(client, symbol, signal, entry_price, sl_price, tp_price, qty, risk_pct, balance_at_open: float = 0.0, bias: str = ""):
+def ejecutar_apertura_completa(client, symbol, signal, entry_price, sl_price, tp_price, qty, risk_pct, balance_at_open: float = 0.0, bias: str = "", ema50: float = None, trend_bias: str = None):
     """
-    Orquesta la apertura: Cancela previas, pone LIMIT, espera FILL y clava SL/TP.
+    Orquesta la apertura: Cancela previas, MARKET entry, confirma posición y clava SL/TP.
     bias: fuentes de señal (ej: "RSI25+Donch20") — se guarda en el journal.
+    ema50, trend_bias: bias macro al momento de la señal — se guarda en el journal.
     """
     try:
         # 1. Limpieza previa
@@ -89,7 +90,7 @@ def ejecutar_apertura_completa(client, symbol, signal, entry_price, sl_price, tp
         except Exception as e:
             logger.error(f"Error colocando SL/TP post-fill: {e}")
 
-        record_open(trade_id, symbol, signal, actual_entry, sl_price, tp_price, qty, risk_pct, balance_at_open, bias=bias)
+        record_open(trade_id, symbol, signal, actual_entry, sl_price, tp_price, qty, risk_pct, balance_at_open, bias=bias, ema50=ema50, trend_bias=trend_bias)
         crear_notifier().alert_trade_open(symbol, signal, actual_entry, sl_price, tp_price, qty, risk_pct, strategy=bias)
 
         return True
@@ -118,6 +119,92 @@ def sincronizar_realidad_vs_journal(client, symbol):
 
         modified = False
         ahora = datetime.now(timezone.utc).isoformat()
+
+        # --- HELPER: MFE/MAE/duration/time-to-1R desde klines de 5m ---
+        def calcular_excursiones(trade):
+            """
+            Consulta velas de 5m entre entry y close, calcula:
+              - mfe_pct: máxima excursión favorable (% sobre entry)
+              - mae_pct: máxima excursión adversa (% sobre entry, positivo)
+              - duration_hours: tiempo total que estuvo abierto
+              - time_to_1r_hours: tiempo en horas hasta que tocó +1R (None si nunca)
+              - hit_tp / hit_sl: flags que indican si la high/low del recorrido
+                rozó cualquiera de los niveles (útil cuando el cierre fue por timeout
+                pero queremos saber si "casi" llegó al TP).
+            """
+            try:
+                entry_dt = datetime.fromisoformat(trade['entry_time'])
+                close_dt = datetime.fromisoformat(trade.get('close_time') or ahora)
+                entry_ms = int(entry_dt.timestamp() * 1000)
+                close_ms = int(close_dt.timestamp() * 1000)
+
+                entry_price = float(trade.get('entry_price') or 0)
+                sl_price    = float(trade.get('sl_price') or 0)
+                tp_price    = float(trade.get('tp_price') or 0)
+                direction   = trade.get('direction', 'LONG')
+                if entry_price <= 0:
+                    return
+
+                klines = client.futures_klines(
+                    symbol=trade['symbol'],
+                    interval='5m',
+                    startTime=entry_ms,
+                    endTime=close_ms,
+                    limit=1000
+                )
+                if not klines:
+                    return
+
+                risk_dist = abs(entry_price - sl_price) if sl_price else 0.0
+
+                max_high = max(float(k[2]) for k in klines)
+                min_low  = min(float(k[3]) for k in klines)
+
+                if direction == 'LONG':
+                    mfe_price = max_high
+                    mae_price = min_low
+                    mfe_pct   = (mfe_price - entry_price) / entry_price * 100
+                    mae_pct   = (entry_price - mae_price) / entry_price * 100
+                    hit_tp    = bool(tp_price) and max_high >= tp_price
+                    hit_sl    = bool(sl_price) and min_low <= sl_price
+                else:
+                    mfe_price = min_low
+                    mae_price = max_high
+                    mfe_pct   = (entry_price - mfe_price) / entry_price * 100
+                    mae_pct   = (mae_price - entry_price) / entry_price * 100
+                    hit_tp    = bool(tp_price) and min_low <= tp_price
+                    hit_sl    = bool(sl_price) and max_high >= sl_price
+
+                # Time-to-1R: primera vela donde el high/low del recorrido alcanzó +1R
+                time_to_1r_h = None
+                if risk_dist > 0:
+                    for k in klines:
+                        k_open_ms = int(k[0])
+                        k_high    = float(k[2])
+                        k_low     = float(k[3])
+                        reached = (k_high >= entry_price + risk_dist) if direction == 'LONG' \
+                                  else (k_low <= entry_price - risk_dist)
+                        if reached:
+                            time_to_1r_h = (k_open_ms - entry_ms) / 1000.0 / 3600.0
+                            break
+
+                duration_h = (close_ms - entry_ms) / 1000.0 / 3600.0
+
+                trade['mfe_pct']          = round(mfe_pct, 4)
+                trade['mae_pct']          = round(mae_pct, 4)
+                trade['mfe_price']        = round(mfe_price, 4)
+                trade['mae_price']        = round(mae_price, 4)
+                trade['duration_hours']   = round(duration_h, 2)
+                trade['time_to_1r_hours'] = round(time_to_1r_h, 2) if time_to_1r_h is not None else None
+                trade['hit_tp_intratrade'] = hit_tp
+                trade['hit_sl_intratrade'] = hit_sl
+
+                logger.info(
+                    f"[{symbol}] Excursiones: MFE={mfe_pct:.2f}% MAE={mae_pct:.2f}% "
+                    f"dur={duration_h:.1f}h time-to-1R={time_to_1r_h} hitTP={hit_tp} hitSL={hit_sl}"
+                )
+            except Exception as e:
+                logger.error(f"Error calculando excursiones MFE/MAE: {e}")
 
         # --- FUNCIÓN INTERNA: CALCULAR PNL/FEES DESDE BINANCE ---
         def calcular_pnl_y_fees_final(trade):
@@ -157,16 +244,7 @@ def sincronizar_realidad_vs_journal(client, symbol):
                 trade['pnl_usdt'] = round(pnl_acumulado - fees_acumulados, 4)
                 trade['exit_price'] = ultimo_precio
 
-                logger.info(
-                    f"[{symbol}] PnL final: "
-                    f"Bruto={trade['pnl_bruto']} "
-                    f"Fees={trade['fees']} "
-                    f"Neto={trade['pnl_usdt']} "
-                    f"Exit={ultimo_precio}"
-                )
-
-                # Notificación Telegram de cierre
-                notifier = crear_notifier()
+                # Clasificar resultado y guardarlo en el journal (antes solo iba a Telegram)
                 pnl_neto = trade['pnl_usdt']
                 if pnl_neto > 0:
                     resultado = "WIN"
@@ -174,7 +252,22 @@ def sincronizar_realidad_vs_journal(client, symbol):
                     resultado = "LOSS"
                 else:
                     resultado = "BREAKEVEN"
+                trade['result'] = resultado
 
+                logger.info(
+                    f"[{symbol}] PnL final: "
+                    f"Bruto={trade['pnl_bruto']} "
+                    f"Fees={trade['fees']} "
+                    f"Neto={trade['pnl_usdt']} "
+                    f"Exit={ultimo_precio} "
+                    f"Result={resultado}"
+                )
+
+                # Calcular MFE/MAE/duration/time-to-1R consultando klines de 5m
+                calcular_excursiones(trade)
+
+                # Notificación Telegram de cierre
+                notifier = crear_notifier()
                 notifier.alert_trade_close(
                     symbol=symbol,
                     pnl=pnl_neto,

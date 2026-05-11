@@ -24,6 +24,12 @@ MIN_SCORE = int(os.getenv("MIN_SCORE", "2"))                  # score mínimo pa
 MAX_HOLD_HOURS = int(os.getenv("MAX_HOLD_HOURS", "16"))
 COOLDOWN_HOURS = int(os.getenv("COOLDOWN_HOURS", "2"))
 
+# Filtro de tendencia EMA50 (true = no opera contra tendencia 4h)
+EMA_FILTER_ENABLED = os.getenv("EMA_FILTER_ENABLED", "true").lower() == "true"
+
+# Archivo de log de señales (incluso descartadas) para análisis posterior
+SIGNAL_LOG_FILE = f"logs/signals_{BOT_ID}.jsonl"
+
 # Compatibilidad con módulos reutilizados (risk.py, live_writer.py)
 RISK_PER_TRADE = RISK_BASE
 TP_RR_RATIO = RR_RATIO
